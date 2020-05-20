@@ -2,7 +2,6 @@ import logging
 import json
 import os
 import importlib.util
-import torch.distributed.launch as launch # TODO: uncomment it after local testing
 import sys
 from argparse import ArgumentParser
 
@@ -90,10 +89,8 @@ def task_selector(sm_args, transformer_args):
         task_path = os.path.join(os.environ["SAGEMAKER_SUBMIT_DIRECTORY"], 
                                  "transformers/examples/text-classification/run_glue.py")
             
-        print(transformer_args)
         if "--task_name" in transformer_args:
             task_name = transformer_args[transformer_args.index("--task_name")+1]
-            print(task_name)
 
         else:
             raise ValueError("Cannot find required \"task_name\" argument to run GLUE tasks.")
@@ -101,7 +98,7 @@ def task_selector(sm_args, transformer_args):
         if task_name not in GLUE_TASKS:
             raise ValueError(f"Task {task_name} is not in list of supported GLUE tasks: {GLUE_TASKS}")
         
-        transformer_args += ["--data_dir", os.path.join(os.environ['SM_CHANNEL_TRAIN'], task_name), 
+        transformer_args += ["--data_dir", os.environ['SM_CHANNEL_TRAIN'], 
                              "--output_dir", os.environ['SM_OUTPUT_DATA_DIR']]
     
     else:
@@ -127,8 +124,6 @@ if __name__ == "__main__":
     
     # Derive parameters of distributed training cluster in Sagemaker
     world = get_training_world()
-#     logger.info('Running \'{}\' backend on {} nodes and {} processes. World size is {}. Current host is {}'.
-#                 format("NCCL", world["number_of_machines"], world["number_of_processes"], world["size"], world["machine_rank"]))
 
     # Creates launch configuration according to PyTorch Distributed Launch utility requirements: 
     # https://github.com/pytorch/pytorch/blob/master/torch/distributed/launch.py
@@ -138,4 +133,7 @@ if __name__ == "__main__":
         
     # Launch distributed training. Note, that launch script configuration is passed as script arguments
     sys.argv = [""] + launch_config + [task_script]+ transformer_args
+    
+    import torch.distributed.launch as launch # pytorch versino of launch utility
+    
     launch.main()
