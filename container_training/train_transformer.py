@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 BOOL_FLAGS = ["--fp16", "--do_train", "--do_eval"]
+GLUE_TASKS = ["CoLA", "SST-2", "MRPC", "STS-B", "QQP", "MNLI", "QNLI", "RTE", "WNLI"]
 
 def _arg_flags_to_bool(args):
     """
@@ -68,6 +69,7 @@ def task_selector(sm_args, transformer_args):
     # convert boolen flags
     transformer_args = _arg_flags_to_bool(transformer_args)
     
+    # Language modeling problem setup
     if sm_args.nlp_problem.lower() == "language-modeling":        
         
         task_path = os.path.join(os.environ["SAGEMAKER_SUBMIT_DIRECTORY"], 
@@ -81,8 +83,31 @@ def task_selector(sm_args, transformer_args):
                                  "--output_dir", os.environ['SM_OUTPUT_DATA_DIR']]
         else:
             raise ValueError(f"Dataset {sm_args.dataset} is not supported.")
+            
+    # Text classification problem setup        
+    elif sm_args.nlp_problem.lower() == "text-classification":
+        
+        task_path = os.path.join(os.environ["SAGEMAKER_SUBMIT_DIRECTORY"], 
+                                 "transformers/examples/text-classification/run_glue.py")
+            
+        print(transformer_args)
+        if "--task_name" in transformer_args:
+            task_name = transformer_args[transformer_args.index("--task_name")+1]
+            print(task_name)
+
+        else:
+            raise ValueError("Cannot find required \"task_name\" argument to run GLUE tasks.")
+            
+        if task_name not in GLUE_TASKS:
+            raise ValueError(f"Task {task_name} is not in list of supported GLUE tasks: {GLUE_TASKS}")
+        
+        transformer_args += ["--data_dir", os.path.join(os.environ['SM_CHANNEL_TRAIN'], task_name), 
+                             "--output_dir", os.environ['SM_OUTPUT_DATA_DIR']]
+    
     else:
         raise ValueError(f"Task {sm_args.nlp_problem} is not supported.")
+    
+
     
     return task_path, transformer_args
 
@@ -102,8 +127,8 @@ if __name__ == "__main__":
     
     # Derive parameters of distributed training cluster in Sagemaker
     world = get_training_world()
-    logger.info('Running \'{}\' backend on {} nodes and {} processes. World size is {}. Current host is {}'.
-                format("NCCL", world["number_of_machines"], world["number_of_processes"], world["size"], world["machine_rank"]))
+#     logger.info('Running \'{}\' backend on {} nodes and {} processes. World size is {}. Current host is {}'.
+#                 format("NCCL", world["number_of_machines"], world["number_of_processes"], world["size"], world["machine_rank"]))
 
     # Creates launch configuration according to PyTorch Distributed Launch utility requirements: 
     # https://github.com/pytorch/pytorch/blob/master/torch/distributed/launch.py
@@ -113,6 +138,4 @@ if __name__ == "__main__":
         
     # Launch distributed training. Note, that launch script configuration is passed as script arguments
     sys.argv = [""] + launch_config + [task_script]+ transformer_args
-    print("***** sys.args *****")
-    print(sys.argv)
     launch.main()
