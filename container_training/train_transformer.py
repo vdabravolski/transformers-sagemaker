@@ -9,6 +9,31 @@ from argparse import ArgumentParser
 logger = logging.getLogger(__name__)
 
 
+BOOL_FLAGS = ["--fp16", "--do_train", "--do_eval"]
+
+def _arg_flags_to_bool(args):
+    """
+    Sagemaker doesn't allow to provide boolena flags in its hyperparameters dict.
+    We need to convert params with. string value to bool flag as it's required by Transformer algorithms, e.g.:
+        Sagemaker format   ->      Transformer format
+        "fp16" : "true"    ->      --fp16
+
+    This method converts some common flags.
+    """
+    
+    converted_args = []
+    
+    for i, arg in enumerate(args):
+        if (arg in BOOL_FLAGS):
+            if args[i+1].lower()=="true":
+                converted_args.append(arg)
+            del args[i+1] #remove flag value            
+        else:
+            converted_args.append(arg)
+            
+    return converted_args
+    
+
 def get_training_world():
 
     """
@@ -40,6 +65,9 @@ def task_selector(sm_args, transformer_args):
     and returns training path and augmented argline.
     """
     
+    # convert boolen flags
+    transformer_args = _arg_flags_to_bool(transformer_args)
+    
     if sm_args.nlp_problem.lower() == "language-modeling":        
         
         task_path = os.path.join(os.environ["SAGEMAKER_SUBMIT_DIRECTORY"], 
@@ -67,13 +95,7 @@ if __name__ == "__main__":
     parser.add_argument('--nlp-problem', type=str, default="language-modeling", help="Define NLP problem to run from HuggingFace example library. See for options: \
                                                                                https://github.com/huggingface/transformers/tree/master/examples#the-big-table-of-tasks.")
     parser.add_argument('--dataset', type=str, default=None, help="Define which dataset to use.")
-    parser.add_argument('--do_train', type=str, default=None, help="Whether to train model")
-    parser.add_argument('--do_eval', type=str, default=None, help="Whether to evaluate model")
     sm_args, transformer_args = parser.parse_known_args()
-
-    # Sagemaker cannot handle boolean flags, like do_train or do_eval, hence, need to convert manually.
-    do_train = "--do_train" if sm_args.do_train.lower()=="true" else ""
-    do_eval = "--do_eval" if sm_args.do_eval.lower()=="true" else ""
     
     # Get task script and its cofiguration
     task_script, transformer_args = task_selector(sm_args, transformer_args)
@@ -90,7 +112,7 @@ if __name__ == "__main__":
                      "--master_port", world['master_port']]
         
     # Launch distributed training. Note, that launch script configuration is passed as script arguments
-    sys.argv = [""] + launch_config + [task_script, do_train, do_eval]+ transformer_args
+    sys.argv = [""] + launch_config + [task_script]+ transformer_args
     print("***** sys.args *****")
     print(sys.argv)
     launch.main()
