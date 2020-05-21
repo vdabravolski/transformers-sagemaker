@@ -4,10 +4,15 @@ import os
 import importlib.util
 import sys
 from argparse import ArgumentParser
+import launch
 
-logger = logging.getLogger(__name__)
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG) # update log level as needed
+logging.basicConfig(handlers=[handler])
 
 
+# Transformer specific lists
 BOOL_FLAGS = ["--fp16", "--do_train", "--do_eval"]
 GLUE_TASKS = ["CoLA", "SST-2", "MRPC", "STS-B", "QQP", "MNLI", "QNLI", "RTE", "WNLI"]
 
@@ -104,8 +109,6 @@ def task_selector(sm_args, transformer_args):
     else:
         raise ValueError(f"Task {sm_args.nlp_problem} is not supported.")
     
-
-    
     return task_path, transformer_args
 
 
@@ -133,7 +136,4 @@ if __name__ == "__main__":
         
     # Launch distributed training. Note, that launch script configuration is passed as script arguments
     sys.argv = [""] + launch_config + [task_script]+ transformer_args
-    
-    import torch.distributed.launch as launch # pytorch versino of launch utility
-    
-    launch.main()
+    launch.main()    
